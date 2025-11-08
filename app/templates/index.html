@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>BBZ Reservas · Coletar disponibilidade</h1>
-<p class="muted">Entre com seu login/senha da área do cliente para gerar a grade de quadras (próximos 15 dias). Nada é salvo em disco.</p>
+<p class="muted">
+  Entre com seu login/senha da área do cliente e, opcionalmente, escolha um período.
+  <br><strong>Dica:</strong> quanto maior o período, mais tempo levará para extrair os dados.
+</p>
 
 <form method="post" action="/run">
   <label for="username">Login (BBZ)</label>
@@ -9,6 +12,21 @@
 
   <label for="password">Senha (BBZ)</label>
   <input id="password" name="password" type="password" required>
+
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top:14px">
+    <div>
+      <label for="start_date">Data inicial (opcional)</label>
+      <input id="start_date" name="start_date" type="date">
+    </div>
+    <div>
+      <label for="end_date">Data final (opcional)</label>
+      <input id="end_date" name="end_date" type="date">
+    </div>
+  </div>
+
+  <p class="muted" style="margin-top:8px">
+    Se você deixar em branco, buscaremos os próximos <strong>15 dias</strong>.
+  </p>
 
   <div class="mt"><button class="btn" type="submit">Gerar disponibilidade</button></div>
 </form>
