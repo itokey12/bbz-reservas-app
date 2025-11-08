@@ -8,10 +8,26 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.support.expected_conditions import staleness_of
 
 SITE_URL = os.getenv("SITE_URL", "https://bbz.com.br/area-do-cliente/")
 AREA_GERAL = "https://servc9.webware.com.br/bin/sol/aAreaGeral.asp"
 MINHA_UNIDADE_RESERVAS = "https://servc9.webware.com.br/bin/aplic/cpMinhaUnidadeReservas.asp"
+
+def wait_table_refresh(wait: WebDriverWait, driver, prev_html: str, timeout: int = 20):
+    """Aguarda a atualização do corpo da tabela comparando HTML anterior x novo."""
+    try:
+        wait.until(lambda d: d.find_element(By.CSS_SELECTOR, "#tabelaDePeriodos tbody"))
+        start = time.time()
+        while time.time() - start < timeout:
+            cur_el = driver.find_element(By.CSS_SELECTOR, "#tabelaDePeriodos tbody")
+            cur_html = cur_el.get_attribute("innerHTML")
+            if cur_html and cur_html != prev_html:
+                return True
+            time.sleep(0.15)
+    except Exception:
+        pass
+    return False
 
 def _strip_accents(s: str) -> str:
     if not s:
@@ -133,6 +149,7 @@ def click_next_month(wait, driver):
     time.sleep(1.0)
 
 def click_day_in_calendar(wait, driver, target: date):
+    # alinhar mês
     while True:
         header_start = get_header_month_start(wait, driver)
         if header_start.year == target.year and header_start.month == target.month:
@@ -141,14 +158,25 @@ def click_day_in_calendar(wait, driver, target: date):
             click_next_month(wait, driver)
         else:
             break
+
+    # guarda HTML atual da tabela para detectar refresh
+    prev_html = ""
+    try:
+        prev_html = driver.find_element(By.CSS_SELECTOR, "#tabelaDePeriodos tbody").get_attribute("innerHTML")
+    except Exception:
+        pass
+
+    # clicar no dia
     day_sel = ".datepicker-days td.day:not(.old):not(.new):not(.disabled):not(.foraPeriodo)"
     days = driver.find_elements(By.CSS_SELECTOR, day_sel)
     for td in days:
         if (td.text or "").strip() == str(target.day):
             driver.execute_script("arguments[0].click();", td)
-            time.sleep(0.8)
+            # aguarda a tabela de períodos atualizar (sem sleep fixo)
+            wait_table_refresh(wait, driver, prev_html, timeout=20)
             return True
     return False
+
 
 def find_first(wait, selectors: List[Tuple[str, str]], must_click=False, driver=None):
     for by, sel in selectors:
@@ -240,14 +268,12 @@ def parse_period_table(wait, driver, day: date, quadra_nome: str) -> pd.DataFram
             continue
     return pd.DataFrame(out)
 
-def extract_15days_for_quadra(wait, driver, idx: int) -> pd.DataFrame:
+def extract_range_for_quadra(wait, driver, idx: int, start: date, end: date) -> pd.DataFrame:
     quadra_nome = f"Quadra {idx+1}"
     click_tenis_by_index(driver, idx)
-    time.sleep(0.8)
     switch_to_new_window_if_any(driver)
     try_switch_to_any_frame(driver)
-    start = date.today()
-    end = start + timedelta(days=14)
+
     all_rows = []
     current = start
     while current <= end:
@@ -255,16 +281,11 @@ def extract_15days_for_quadra(wait, driver, idx: int) -> pd.DataFrame:
         if not ok:
             current += timedelta(days=1)
             continue
-        time.sleep(0.5)
         df = parse_period_table(wait, driver, current, quadra_nome)
         if not df.empty:
             all_rows.append(df)
         current += timedelta(days=1)
-    try:
-        driver.back(); time.sleep(0.5)
-    except Exception:
-        pass
-    switch_to_new_window_if_any(driver); try_switch_to_any_frame(driver)
+
     return pd.concat(all_rows, ignore_index=True) if all_rows else pd.DataFrame(columns=["data","quadra","hora","status"])
 
 def open_nova_reserva_list(wait, driver):
@@ -310,7 +331,13 @@ def do_login(wait, driver, username: str, password: str):
     except TimeoutException:
         pass
 
-def run_scraping(username: str, password: str) -> str:
+def run_scraping(username: str, password: str, start_date: date = None, end_date: date = None) -> str:
+    from datetime import date as _date
+    if not start_date:
+        start_date = _date.today()
+    if not end_date:
+        end_date = _date.today() + timedelta(days=14)
+
     log = []
     def L(msg):
         log.append(msg)
@@ -321,8 +348,9 @@ def run_scraping(username: str, password: str) -> str:
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    # user-agent para evitar bloqueio bobo por WAF
-    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                         "AppleWebKit/537.36 (KHTML, like Gecko) "
+                         "Chrome/122.0.0.0 Safari/537.36")
 
     driver = webdriver.Chrome(service=Service(), options=options)
     wait = WebDriverWait(driver, 25)
@@ -332,7 +360,7 @@ def run_scraping(username: str, password: str) -> str:
         driver.get(SITE_URL)
         L(f"URL inicial: {driver.current_url}")
 
-        # Preenche e tenta logar
+        # === LOGIN ===
         try:
             user_input = wait.until(EC.presence_of_element_located((By.ID, "mem")))
             pass_input = wait.until(EC.presence_of_element_located((By.ID, "pass")))
@@ -340,7 +368,6 @@ def run_scraping(username: str, password: str) -> str:
             pass_input.clear(); pass_input.send_keys(password)
             L("Campos de login localizados e preenchidos.")
 
-            # Aceita termos, se existir
             try:
                 cb = driver.find_element(By.ID, "termo")
                 driver.execute_script("if(!arguments[0].checked){arguments[0].click();}", cb)
@@ -348,7 +375,6 @@ def run_scraping(username: str, password: str) -> str:
             except Exception:
                 L("Checkbox de termos não encontrado (ok).")
 
-            # Botão ENTRAR
             btn = find_first(wait, [
                 (By.XPATH, "//button[contains(.,'ENTRAR')]"),
                 (By.CSS_SELECTOR, "button[type='submit']"),
@@ -364,42 +390,48 @@ def run_scraping(username: str, password: str) -> str:
             html += f"<details><summary>Log</summary><pre>{chr(10).join(log)}</pre></details>"
             return html
 
-        # Aguarda redirecionamento/área interna
+        # === PÓS LOGIN ===
         try:
             wait.until(lambda d: "webware" in d.current_url or "servc" in d.current_url)
             L(f"Redirecionado para: {driver.current_url}")
         except TimeoutException:
-            # Se não redirecionou, checa mensagens de erro na própria página
             page = driver.page_source[:5000]
             L("Timeout aguardando redirecionamento pós-login.")
             html = "<h3>Login não confirmou</h3><p>O site não redirecionou para a área interna.</p>"
             html += "<details><summary>Diagnóstico</summary>"
             html += "<pre>" + "\n".join(log) + "</pre>"
-            html += "<h4>Trecho da página</h4><pre>" + (page.replace("<","&lt;")) + "</pre>"
+            html += "<h4>Trecho da página</h4><pre>" + (page.replace('<','&lt;')) + "</pre>"
             html += "</details>"
             return html
 
-        # Abre lista de reservas
+        # === ACESSA LISTA DE RESERVAS ===
         L("Abrindo 'Minha Unidade > Reservas'.")
         open_nova_reserva_list(wait, driver)
         L(f"Após abrir lista: URL={driver.current_url}")
 
-        # Verifica se há links de quadra
         itens = list_tenis_links(driver)
         L(f"Links de QUADRA encontrados: {len(itens)}")
         if not itens:
             page = driver.page_source[:5000]
             html = "<h3>Nenhuma quadra encontrada na lista</h3><p>Os seletores podem ter mudado ou o portal bloqueou o acesso.</p>"
             html += "<details><summary>Diagnóstico</summary><pre>" + "\n".join(log) + "</pre>"
-            html += "<h4>Trecho da página</h4><pre>" + (page.replace("<","&lt;")) + "</pre></details>"
+            html += "<h4>Trecho da página</h4><pre>" + (page.replace('<','&lt;')) + "</pre></details>"
             return html
 
-        # Coleta das 3 quadras
+        # === COLETA POR INTERVALO ===
         dfs = []
         for i in range(3):
             try:
-                L(f"Coletando Quadra {i+1} (15 dias)...")
-                df = extract_15days_for_quadra(wait, driver, i)
+                L(f"Preparando lista para Quadra {i+1}…")
+                driver.get(MINHA_UNIDADE_RESERVAS)
+                switch_to_new_window_if_any(driver)
+                try_switch_to_any_frame(driver)
+
+                itens = list_tenis_links(driver)
+                L(f"Links de QUADRA visíveis agora: {len(itens)}")
+
+                L(f"Coletando Quadra {i+1} ({(end_date - start_date).days + 1} dias)…")
+                df = extract_range_for_quadra(wait, driver, i, start_date, end_date)
                 L(f"Quadra {i+1}: {len(df)} linhas.")
                 if not df.empty:
                     dfs.append(df)
@@ -410,10 +442,10 @@ def run_scraping(username: str, password: str) -> str:
             page = driver.page_source[:5000]
             html = "<h3>Nenhum dado coletado</h3><p>Pode ser bloqueio do site, mudança no HTML, ou sem slots publicados.</p>"
             html += "<details><summary>Diagnóstico</summary><pre>" + "\n".join(log) + "</pre>"
-            html += "<h4>Trecho da página</h4><pre>" + (page.replace("<","&lt;")) + "</pre></details>"
+            html += "<h4>Trecho da página</h4><pre>" + (page.replace('<','&lt;')) + "</pre></details>"
             return html
 
-        # Monta e mostra HTML final
+        # === TRATAMENTO FINAL E RENDER HTML ===
         full = pd.concat(dfs, ignore_index=True)
         full["data"] = pd.to_datetime(full["data"])
         full["hora"] = full["hora"].fillna("").astype(str).str.strip()
@@ -461,7 +493,7 @@ def run_scraping(username: str, password: str) -> str:
             wide["_t"] = pd.to_datetime(wide["hora"], format="%H:%M", errors="coerce")
             wide = wide.sort_values(["_d", "_t"], kind="stable", na_position="first").drop(columns=["_d","_t"])
 
-        for i in range(1, 3+1):
+        for i in range(1, 4):
             col = f"Quadra {i}"
             if col not in wide.columns:
                 wide[col] = None
@@ -470,7 +502,6 @@ def run_scraping(username: str, password: str) -> str:
         wide = wide[["Dia", "DiaSemana", "Hora", "Quadra 1", "Quadra 2", "Quadra 3"]]
 
         html = save_html_from_wide_to_string(wide)
-        # Anexa um bloco <details> com o log (útil para depurar sem gravar nada)
         html += "<details style='margin:16px 0;'><summary>Log de execução</summary><pre>"
         html += "\n".join(log)
         html += "</pre></details>"
@@ -481,4 +512,5 @@ def run_scraping(username: str, password: str) -> str:
             driver.quit()
         except Exception:
             pass
+
 
