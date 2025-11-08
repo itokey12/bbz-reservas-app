@@ -409,8 +409,12 @@ def run_scraping(username: str, password: str, start_date: date = None, end_date
         open_nova_reserva_list(wait, driver)
         L(f"Após abrir lista: URL={driver.current_url}")
 
+        L(f"URL atual antes de buscar quadras: {driver.current_url}")
+        html_preview = driver.page_source[:2000]
+        L(f"Prévia do HTML: {html_preview[:500].replace('<','&lt;')}")
         itens = list_tenis_links(driver)
         L(f"Links de QUADRA encontrados: {len(itens)}")
+
         if not itens:
             page = driver.page_source[:5000]
             html = "<h3>Nenhuma quadra encontrada na lista</h3><p>Os seletores podem ter mudado ou o portal bloqueou o acesso.</p>"
