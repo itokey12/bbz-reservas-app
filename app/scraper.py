@@ -372,10 +372,30 @@ def run_scraping(username: str, password: str, start_date: date = None, end_date
     options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                          "AppleWebKit/537.36 (KHTML, like Gecko) "
                          "Chrome/122.0.0.0 Safari/537.36")
+    options.add_argument("--blink-settings=imagesEnabled=false")
+    prefs = {
+        "profile.managed_default_content_settings.images": 2,
+        "profile.managed_default_content_settings.stylesheets": 2,
+        "profile.managed_default_content_settings.fonts": 2,
+    }
+    options.add_experimental_option("prefs", prefs)
+    
+    # carregar só quando DOM está pronto (não aguarda todos recursos)
+    options.page_load_strategy = "eager"
 
     driver = webdriver.Chrome(service=Service(), options=options)
     wait = WebDriverWait(driver, 25)
-
+    
+    # === Aceleração de rede: bloqueia recursos estáticos pesados ===
+    try:
+        driver.execute_cdp_cmd("Network.enable", {})
+        driver.execute_cdp_cmd("Network.setBlockedURLs", {
+            "urls": ["*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp",
+                     "*.svg", "*.css", "*.woff", "*.woff2", "*.ttf"]
+        })
+    except Exception:
+        pass
+        
     try:
         L(f"Abrindo {SITE_URL}")
         driver.get(SITE_URL)
@@ -448,9 +468,7 @@ def run_scraping(username: str, password: str, start_date: date = None, end_date
         for i in range(3):
             try:
                 L(f"Preparando lista para Quadra {i+1}…")
-                driver.get(MINHA_UNIDADE_RESERVAS)
-                switch_to_new_window_if_any(driver)
-                
+                open_nova_reserva_list(wait, driver)   # caminho “oficial” do portal
                 count = ensure_reservas_list_ready(wait, driver, tries=4)
                 L(f"Links de QUADRA visíveis agora: {count}")
                 
