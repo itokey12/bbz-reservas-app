@@ -201,6 +201,26 @@ def try_switch_to_any_frame(driver):
             driver.switch_to.default_content()
     return False
 
+def ensure_reservas_list_ready(wait, driver, tries: int = 3) -> int:
+    """Garante que estamos no iframe certo e que os links de quadra já renderizaram."""
+    for _ in range(tries):
+        driver.switch_to.default_content()
+        try_switch_to_any_frame(driver)
+        try:
+            # espera direta pelos anchors de SelectReserva
+            wait.until(EC.presence_of_element_located(
+                (By.XPATH, "//a[contains(@onclick,'SelectReserva')]")
+            ))
+        except Exception:
+            time.sleep(0.6)
+            continue
+        # já tem algo, contar via função padrão
+        itens = list_tenis_links(driver)
+        if itens:
+            return len(itens)
+        time.sleep(0.6)
+    return 0
+
 def switch_to_new_window_if_any(driver):
     base = driver.current_window_handle
     time.sleep(0.5)
@@ -270,6 +290,7 @@ def parse_period_table(wait, driver, day: date, quadra_nome: str) -> pd.DataFram
 
 def extract_range_for_quadra(wait, driver, idx: int, start: date, end: date) -> pd.DataFrame:
     quadra_nome = f"Quadra {idx+1}"
+    ensure_reservas_list_ready(wait, driver, tries=4)
     click_tenis_by_index(driver, idx)
     switch_to_new_window_if_any(driver)
     try_switch_to_any_frame(driver)
@@ -429,10 +450,18 @@ def run_scraping(username: str, password: str, start_date: date = None, end_date
                 L(f"Preparando lista para Quadra {i+1}…")
                 driver.get(MINHA_UNIDADE_RESERVAS)
                 switch_to_new_window_if_any(driver)
-                try_switch_to_any_frame(driver)
-
-                itens = list_tenis_links(driver)
-                L(f"Links de QUADRA visíveis agora: {len(itens)}")
+                
+                count = ensure_reservas_list_ready(wait, driver, tries=4)
+                L(f"Links de QUADRA visíveis agora: {count}")
+                
+                # fallback: se ainda 0, reabrir via fluxo oficial (às vezes o GET direto não injeta o iframe certo)
+                if count == 0:
+                    L("Fallback: reabrindo via 'open_nova_reserva_list'.")
+                    open_nova_reserva_list(wait, driver)
+                    count = ensure_reservas_list_ready(wait, driver, tries=4)
+                    L(f"Links após fallback: {count}")
+                    if count == 0:
+                        raise RuntimeError("Links de QUADRA de TÊNIS não renderizaram (iframe/JS).")
 
                 L(f"Coletando Quadra {i+1} ({(end_date - start_date).days + 1} dias)…")
                 df = extract_range_for_quadra(wait, driver, i, start_date, end_date)
