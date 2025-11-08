@@ -311,33 +311,109 @@ def do_login(wait, driver, username: str, password: str):
         pass
 
 def run_scraping(username: str, password: str) -> str:
+    log = []
+    def L(msg):
+        log.append(msg)
+
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
-    options.add_argument("--window-size=1280,900")
+    options.add_argument("--window-size=1366,900")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--font-render-hinting=none")
+    # user-agent para evitar bloqueio bobo por WAF
+    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
 
     driver = webdriver.Chrome(service=Service(), options=options)
-    wait = WebDriverWait(driver, 20)
+    wait = WebDriverWait(driver, 25)
 
     try:
-        do_login(wait, driver, username, password)
-        open_nova_reserva_list(wait, driver)
+        L(f"Abrindo {SITE_URL}")
+        driver.get(SITE_URL)
+        L(f"URL inicial: {driver.current_url}")
 
+        # Preenche e tenta logar
+        try:
+            user_input = wait.until(EC.presence_of_element_located((By.ID, "mem")))
+            pass_input = wait.until(EC.presence_of_element_located((By.ID, "pass")))
+            user_input.clear(); user_input.send_keys(username)
+            pass_input.clear(); pass_input.send_keys(password)
+            L("Campos de login localizados e preenchidos.")
+
+            # Aceita termos, se existir
+            try:
+                cb = driver.find_element(By.ID, "termo")
+                driver.execute_script("if(!arguments[0].checked){arguments[0].click();}", cb)
+                L("Checkbox de termos marcado.")
+            except Exception:
+                L("Checkbox de termos não encontrado (ok).")
+
+            # Botão ENTRAR
+            btn = find_first(wait, [
+                (By.XPATH, "//button[contains(.,'ENTRAR')]"),
+                (By.CSS_SELECTOR, "button[type='submit']"),
+                (By.XPATH, "//input[@type='submit' or @value='ENTRAR']"),
+            ], must_click=True, driver=driver)
+            if not btn:
+                raise RuntimeError("Botão ENTRAR não encontrado.")
+            driver.execute_script("arguments[0].click();", btn)
+            L("Clique no ENTRAR enviado.")
+
+        except Exception as e:
+            html = f"<h3>Falha ao preparar login</h3><pre>{e}</pre>"
+            html += f"<details><summary>Log</summary><pre>{chr(10).join(log)}</pre></details>"
+            return html
+
+        # Aguarda redirecionamento/área interna
+        try:
+            wait.until(lambda d: "webware" in d.current_url or "servc" in d.current_url)
+            L(f"Redirecionado para: {driver.current_url}")
+        except TimeoutException:
+            # Se não redirecionou, checa mensagens de erro na própria página
+            page = driver.page_source[:5000]
+            L("Timeout aguardando redirecionamento pós-login.")
+            html = "<h3>Login não confirmou</h3><p>O site não redirecionou para a área interna.</p>"
+            html += "<details><summary>Diagnóstico</summary>"
+            html += "<pre>" + "\n".join(log) + "</pre>"
+            html += "<h4>Trecho da página</h4><pre>" + (page.replace("<","&lt;")) + "</pre>"
+            html += "</details>"
+            return html
+
+        # Abre lista de reservas
+        L("Abrindo 'Minha Unidade > Reservas'.")
+        open_nova_reserva_list(wait, driver)
+        L(f"Após abrir lista: URL={driver.current_url}")
+
+        # Verifica se há links de quadra
+        itens = list_tenis_links(driver)
+        L(f"Links de QUADRA encontrados: {len(itens)}")
+        if not itens:
+            page = driver.page_source[:5000]
+            html = "<h3>Nenhuma quadra encontrada na lista</h3><p>Os seletores podem ter mudado ou o portal bloqueou o acesso.</p>"
+            html += "<details><summary>Diagnóstico</summary><pre>" + "\n".join(log) + "</pre>"
+            html += "<h4>Trecho da página</h4><pre>" + (page.replace("<","&lt;")) + "</pre></details>"
+            return html
+
+        # Coleta das 3 quadras
         dfs = []
         for i in range(3):
             try:
+                L(f"Coletando Quadra {i+1} (15 dias)...")
                 df = extract_15days_for_quadra(wait, driver, i)
+                L(f"Quadra {i+1}: {len(df)} linhas.")
                 if not df.empty:
                     dfs.append(df)
-            except Exception:
-                continue
+            except Exception as e:
+                L(f"Quadra {i+1}: erro {e}")
 
         if not dfs:
-            return "<!doctype html><meta charset='utf-8'><h3>Nenhum dado coletado.</h3>"
+            page = driver.page_source[:5000]
+            html = "<h3>Nenhum dado coletado</h3><p>Pode ser bloqueio do site, mudança no HTML, ou sem slots publicados.</p>"
+            html += "<details><summary>Diagnóstico</summary><pre>" + "\n".join(log) + "</pre>"
+            html += "<h4>Trecho da página</h4><pre>" + (page.replace("<","&lt;")) + "</pre></details>"
+            return html
 
+        # Monta e mostra HTML final
         full = pd.concat(dfs, ignore_index=True)
         full["data"] = pd.to_datetime(full["data"])
         full["hora"] = full["hora"].fillna("").astype(str).str.strip()
@@ -393,10 +469,16 @@ def run_scraping(username: str, password: str) -> str:
         wide = wide.rename(columns={"hora": "Hora"})
         wide = wide[["Dia", "DiaSemana", "Hora", "Quadra 1", "Quadra 2", "Quadra 3"]]
 
-        return save_html_from_wide_to_string(wide)
+        html = save_html_from_wide_to_string(wide)
+        # Anexa um bloco <details> com o log (útil para depurar sem gravar nada)
+        html += "<details style='margin:16px 0;'><summary>Log de execução</summary><pre>"
+        html += "\n".join(log)
+        html += "</pre></details>"
+        return html
 
     finally:
         try:
             driver.quit()
         except Exception:
             pass
+
