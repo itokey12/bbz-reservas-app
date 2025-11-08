@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>BBZ Reservas · Coletar disponibilidade</h1>
+<p class="muted">Entre com seu login/senha da área do cliente para gerar a grade de quadras (próximos 15 dias). Nada é salvo em disco.</p>
+
+<form method="post" action="/run">
+  <label for="username">Login (BBZ)</label>
+  <input id="username" name="username" type="text" required>
+
+  <label for="password">Senha (BBZ)</label>
+  <input id="password" name="password" type="password" required>
+
+  <div class="mt"><button class="btn" type="submit">Gerar disponibilidade</button></div>
+</form>
+{% endblock %}

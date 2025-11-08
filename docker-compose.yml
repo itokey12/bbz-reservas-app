@@ -1,0 +1,7 @@
+services:
+  bbz-reservas:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - SITE_URL=https://bbz.com.br/area-do-cliente/
