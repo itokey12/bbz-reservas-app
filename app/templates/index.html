@@ -28,14 +28,18 @@
     Se você deixar em branco, buscaremos os próximos <strong>15 dias</strong>.
   </p>
 
- <div class="mt">
-    <button type="submit" formaction="/run_full_parallel">Busca completa (paralelo)</button>
-  </div>
+<div class="mt">
+  <button class="btn" type="submit" formaction="/run_full_parallel_sync">
+    Busca completa (paralelo)
+  </button>
+</div>
 
-  <div class="mt">
-    <button type="submit" formaction="/run_fast_parallel">Busca rápida (paralelo)</button>
-    <p class="muted">Só slots disponíveis; pula pivot/estilização.</p>
-  </div>
+<div class="mt">
+  <button class="btn" type="submit" formaction="/run_fast_parallel_sync">
+    Busca rápida (paralelo)
+  </button>
+  <p class="muted">Só slots disponíveis; sem pivot/estilização pesada.</p>
+</div>
 </form>
 
 <script>
