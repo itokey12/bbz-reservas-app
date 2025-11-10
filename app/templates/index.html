@@ -28,6 +28,26 @@
     Se você deixar em branco, buscaremos os próximos <strong>15 dias</strong>.
   </p>
 
-  <div class="mt"><button class="btn" type="submit">Gerar disponibilidade</button></div>
+<div class="mt">
+  <button class="btn" type="submit">Busca completa</button>
+</div>
+<div class="mt">
+  <button class="btn" type="submit" formaction="/run_fast">
+    Busca rápida
+  </button>
+  <p class="muted">Pula linhas indisponíveis e não faz pivot/estilização pesada.</p>
+</div>
 </form>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toISOString().split('T')[0];
+    const startInput = document.getElementById('start_date');
+    if (startInput && !startInput.value) {
+      startInput.value = today;
+    }
+  });
+</script>
+
 {% endblock %}
+
+
