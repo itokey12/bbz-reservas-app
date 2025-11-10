@@ -1,9 +1,7 @@
-from fastapi import FastAPI, Request, Form, BackgroundTasks
-from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-import uuid, datetime as dt
-import traceback
-
+import datetime as dt
 from app.scraper import run_full_parallel, run_fast_parallel
 
 app = FastAPI()
@@ -16,19 +14,27 @@ def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 def _parse_dates(start_date: str | None, end_date: str | None):
-    start, end = None, None
-    if start_date:
-        start = dt.datetime.strptime(start_date, "%Y-%m-%d").date()
-    if end_date:
-        end = dt.datetime.strptime(end_date, "%Y-%m-%d").date()
-    if start and end and end < start:
+    start = dt.datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else dt.date.today()
+    end   = dt.datetime.strptime(end_date, "%Y-%m-%d").date()   if end_date   else dt.date.today() + dt.timedelta(days=14)
+    if end < start:
         raise ValueError("Data final anterior à inicial.")
-    ref_start = start or dt.date.today()
-    ref_end = end or (dt.date.today() + dt.timedelta(days=14))
-    max_span = 45
-    if (ref_end - ref_start).days > max_span:
-        raise ValueError(f"Período muito longo. Máximo permitido: {max_span} dias.")
-    return start or ref_start, end or ref_end
+    if (end - start).days > 45:
+        raise ValueError("Período muito longo. Máximo permitido: 45 dias.")
+    return start, end
+
+@app.post("/run_full_parallel_sync", response_class=HTMLResponse)
+def run_full_parallel_sync(username: str = Form(...), password: str = Form(...),
+                           start_date: str = Form(None), end_date: str = Form(None)):
+    start, end = _parse_dates(start_date, end_date)
+    html = run_full_parallel(username, password, start, end)
+    return HTMLResponse(html)
+
+@app.post("/run_fast_parallel_sync", response_class=HTMLResponse)
+def run_fast_parallel_sync(username: str = Form(...), password: str = Form(...),
+                           start_date: str = Form(None), end_date: str = Form(None)):
+    start, end = _parse_dates(start_date, end_date)
+    html = run_fast_parallel(username, password, start, end)
+    return HTMLResponse(html)
 
 @app.post("/run_full_parallel", response_class=HTMLResponse)
 def run_full(request: Request, background_tasks: BackgroundTasks,
