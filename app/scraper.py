@@ -275,10 +275,10 @@ def _build_chrome():
     from selenium.webdriver.chrome.options import Options
     options = Options()
     options.add_argument("--headless=new")
-    options.add_argument("--window-size=1366,900")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1366,900")
     options.add_argument("--blink-settings=imagesEnabled=false")
     options.add_experimental_option("prefs", {
         "profile.managed_default_content_settings.images": 2,
@@ -287,9 +287,13 @@ def _build_chrome():
     })
     options.page_load_strategy = "eager"
 
-    # 👇 binário no Render (defina uma dessas env vars no painel do Render)
-    chrome_bin = os.getenv("CHROME_BIN") or os.getenv("GOOGLE_CHROME_BIN") \
-                 or "/usr/bin/chromium"  # ajuste conforme sua imagem
+    # >>> aponto para o binário do Chrome/Chromium presente no container
+    chrome_bin = (
+        os.getenv("CHROME_BIN")
+        or os.getenv("GOOGLE_CHROME_BIN")
+        or "/usr/bin/chromium"
+        or "/usr/bin/chromium-browser"
+    )
     if os.path.exists(chrome_bin):
         options.binary_location = chrome_bin
 
