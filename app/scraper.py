@@ -272,7 +272,8 @@ def extract_range_for_quadra(wait, driver, idx: int, start: date, end: date) -> 
 # --- Chrome factory para rodar em paralelo ---
 
 def _build_chrome():
-    options = webdriver.ChromeOptions()
+    from selenium.webdriver.chrome.options import Options
+    options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--window-size=1366,900")
     options.add_argument("--no-sandbox")
@@ -285,6 +286,13 @@ def _build_chrome():
         "profile.managed_default_content_settings.fonts": 2,
     })
     options.page_load_strategy = "eager"
+
+    # 👇 binário no Render (defina uma dessas env vars no painel do Render)
+    chrome_bin = os.getenv("CHROME_BIN") or os.getenv("GOOGLE_CHROME_BIN") \
+                 or "/usr/bin/chromium"  # ajuste conforme sua imagem
+    if os.path.exists(chrome_bin):
+        options.binary_location = chrome_bin
+
     drv = webdriver.Chrome(service=Service(), options=options)
     with contextlib.suppress(Exception):
         drv.execute_cdp_cmd("Network.enable", {})
@@ -490,10 +498,10 @@ def _render_fast_html(hits: list[dict]) -> str:
 
 def run_full_parallel(username: str, password: str, start_date: date, end_date: date) -> str:
     """Modo COMPLETO, paralelo por quadra."""
-    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     log = [f"Parallel full: {start_date}..{end_date}"]
     dfs = []
-    with ProcessPoolExecutor(max_workers=3) as ex:
+    with ThreadPoolExecutor(max_workers=3) as ex:
         futs = [ex.submit(worker_full, username, password, qi, start_date, end_date) for qi in (0,1,2)]
         for fu in as_completed(futs):
             df = fu.result()
@@ -506,9 +514,9 @@ def run_full_parallel(username: str, password: str, start_date: date, end_date: 
 
 def run_fast_parallel(username: str, password: str, start_date: date, end_date: date) -> str:
     """Modo RÁPIDO, paralelo por quadra (só slots disponíveis)."""
-    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     hits: list[dict] = []
-    with ProcessPoolExecutor(max_workers=3) as ex:
+    with ThreadPoolExecutor(max_workers=3) as ex:
         futs = [ex.submit(worker_fast, username, password, qi, start_date, end_date) for qi in (0,1,2)]
         for fu in as_completed(futs):
             hits.extend(fu.result())
