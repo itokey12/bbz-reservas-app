@@ -564,4 +564,93 @@ def run_scraping(username: str, password: str, start_date: date = None, end_date
         except Exception:
             pass
 
+def run_scraping_fast(username: str, password: str, start_date: date = None, end_date: date = None) -> str:
+    from datetime import date as _date
+    if not start_date: start_date = _date.today()
+    if not end_date:   end_date   = _date.today() + timedelta(days=14)
+
+    log = []
+    def L(msg): log.append(msg)
+
+    # === Chrome com otimizações já usadas no fluxo completo ===
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless=new")
+    options.add_argument("--window-size=1366,900")
+    options.add_argument("--no-sandbox"); options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+    options.add_argument("--blink-settings=imagesEnabled=false")
+    prefs = {
+        "profile.managed_default_content_settings.images": 2,
+        "profile.managed_default_content_settings.stylesheets": 2,
+        "profile.managed_default_content_settings.fonts": 2,
+    }
+    options.add_experimental_option("prefs", prefs)
+    options.page_load_strategy = "eager"  # já usado no completo
+    driver = webdriver.Chrome(service=Service(), options=options)
+    wait = WebDriverWait(driver, 25)
+
+    # bloqueio de recursos estáticos (mesma ideia do completo)
+    try:
+        driver.execute_cdp_cmd("Network.enable", {})
+        driver.execute_cdp_cmd("Network.setBlockedURLs", {
+            "urls": ["*.png","*.jpg","*.jpeg","*.gif","*.webp","*.svg","*.css","*.woff","*.woff2","*.ttf"]
+        })
+    except Exception:
+        pass
+
+    try:
+        # login + ir para lista de reservas (mesmos utilitários)
+        L(f"Abrindo {SITE_URL}"); driver.get(SITE_URL)
+        do_login(wait, driver, username, password)                     # :contentReference[oaicite:10]{index=10}
+        open_nova_reserva_list(wait, driver)                           # :contentReference[oaicite:11]{index=11}
+        ensure_reservas_list_ready(wait, driver, tries=4)              # :contentReference[oaicite:12]{index=12}
+
+        hits = []
+        for i in range(3):  # Quadra 1..3
+            quadra_nome = f"Quadra {i+1}"
+            open_nova_reserva_list(wait, driver)
+            ensure_reservas_list_ready(wait, driver, tries=4)
+            click_tenis_by_index(driver, i)                            # :contentReference[oaicite:13]{index=13}
+            switch_to_new_window_if_any(driver)                         # :contentReference[oaicite:14]{index=14}
+            try_switch_to_any_frame(driver)                             # :contentReference[oaicite:15]{index=15}
+
+            cur = start_date
+            while cur <= end_date:
+                if not click_day_in_calendar(wait, driver, cur):       # :contentReference[oaicite:16]{index=16}
+                    cur += timedelta(days=1); continue
+
+                # varre só linhas do dia corrente e guarda quando houver botão "Reservar"
+                rows = driver.find_elements(By.CSS_SELECTOR, "#tabelaDePeriodos tbody tr")
+                for tr in rows:
+                    try:
+                        hora_txt = (tr.find_element(By.CSS_SELECTOR, "td.integral").text or "").strip()
+                        m = re.search(r"(\d{2}:\d{2})", hora_txt)
+                        hora = m.group(1) if m else (hora_txt.split()[0] if hora_txt else "")
+                        btns = tr.find_elements(By.XPATH, ".//button[contains(translate(.,'RESERVAR','reservar'),'reservar')]")
+                        if btns:  # disponível (mesma regra já usada)  # :contentReference[oaicite:17]{index=17}
+                            hits.append({"data": cur.strftime("%d/%m/%Y"), "hora": hora, "quadra": quadra_nome})
+                    except Exception:
+                        continue
+                cur += timedelta(days=1)
+
+        # HTML leve (sem pivot/Styler)
+        hits.sort(key=lambda r: (r["data"], r["hora"], r["quadra"]))
+        head = """
+        <style>
+          body{font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;margin:20px;color:#222;}
+          table{border-collapse:collapse;width:100%;font-size:13px}
+          th,td{padding:8px 10px;border-bottom:1px solid #eee; text-align:left}
+          tbody tr:nth-child(even){background:#fafafa}
+        </style>
+        """
+        if not hits:
+            return f"<!doctype html><html><head>{head}</head><body><h1>Nenhuma disponibilidade encontrada</h1></body></html>"
+        rows_html = "\n".join(f"<tr><td>{h['data']}</td><td>{h['hora']}</td><td>{h['quadra']}</td></tr>" for h in hits)
+        return f"<!doctype html><html><head>{head}</head><body><h1>Disponíveis</h1><table><thead><tr><th>Data</th><th>Hora</th><th>Quadra</th></tr></thead><tbody>{rows_html}</tbody></table></body></html>"
+
+    finally:
+        try: driver.quit()
+        except Exception: pass
 
