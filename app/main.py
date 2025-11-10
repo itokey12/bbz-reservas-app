@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, Form, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 import uuid, datetime as dt
+import traceback
 
 from app.scraper import run_full_parallel, run_fast_parallel
 
@@ -43,10 +44,11 @@ def run_full(request: Request, background_tasks: BackgroundTasks,
 
     def _job():
         try:
-            html = run_full_parallel(username, password, start, end)
+            html = run_full_parallel(username, password, start, end)  # ou fast
             JOBS[job_id] = {"status":"ok","html":html,"error":None}
         except Exception as e:
-            JOBS[job_id] = {"status":"error","html":None,"error":str(e)}
+            tb = traceback.format_exc()
+            JOBS[job_id] = {"status":"error","html":None,"error":tb}
 
     background_tasks.add_task(_job)
     return RedirectResponse(url=f"/result/{job_id}", status_code=303)
@@ -65,13 +67,14 @@ def run_fast(request: Request, background_tasks: BackgroundTasks,
 
     def _job():
         try:
-            html = run_fast_parallel(username, password, start, end)
+            html = run_full_parallel(username, password, start, end)  # ou fast
             JOBS[job_id] = {"status":"ok","html":html,"error":None}
         except Exception as e:
-            JOBS[job_id] = {"status":"error","html":None,"error":str(e)}
-
-    background_tasks.add_task(_job)
-    return RedirectResponse(url=f"/result/{job_id}", status_code=303)
+            tb = traceback.format_exc()
+            JOBS[job_id] = {"status":"error","html":None,"error":tb}
+    
+        background_tasks.add_task(_job)
+        return RedirectResponse(url=f"/result/{job_id}", status_code=303)
 
 @app.get("/result/{job_id}", response_class=HTMLResponse)
 def result(request: Request, job_id: str):
@@ -84,10 +87,16 @@ def result(request: Request, job_id: str):
 def api_job(job_id: str):
     job = JOBS.get(job_id)
     if not job:
-        return PlainTextResponse("Job não encontrado.", status_code=404)
+        # Em vez de 404, devolva 200 com mensagem legível (evita “loop de erro” no polling)
+        return HTMLResponse("<h3>Job não encontrado</h3><p>Talvez o app tenha reiniciado ou a instância mudou. Refaça a busca.</p>")
+
     if job["status"] == "ok":
         return HTMLResponse(job["html"])
-    elif job["status"] == "error":
-        return HTMLResponse(f"<h3>Erro:</h3><pre>{job['error']}</pre>", status_code=500)
-    else:
-        return HTMLResponse("<em>Processando…</em>")
+
+    if job["status"] == "error":
+        # Mostra o erro como HTML (status 200) para o usuário ver no /result
+        err = job.get("error") or "Erro desconhecido"
+        return HTMLResponse(f"<h3>Erro na execução</h3><pre>{err}</pre>")
+
+    # pending
+    return HTMLResponse("<em>Processando…</em>")
