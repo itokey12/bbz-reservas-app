@@ -6,7 +6,7 @@
   <br><strong>Dica:</strong> quanto maior o período, mais tempo levará para extrair os dados.
 </p>
 
-<form method="post" action="/run">
+<form method="post" action="/run_full_parallel">
   <label for="username">Login (BBZ)</label>
   <input id="username" name="username" type="text" required>
 
@@ -28,16 +28,18 @@
     Se você deixar em branco, buscaremos os próximos <strong>15 dias</strong>.
   </p>
 
-<div class="mt">
-  <button class="btn" type="submit">Busca completa</button>
-</div>
-<div class="mt">
-  <button class="btn" type="submit" formaction="/run_fast">
-    Busca rápida
-  </button>
-  <p class="muted">Pula linhas indisponíveis e não faz pivot/estilização pesada.</p>
-</div>
+ <div class="mt">
+    <button class="btn" type="submit">Busca completa (paralelo)</button>
+  </div>
+
+  <div class="mt">
+    <button class="btn" type="submit" formaction="/run_fast_parallel">
+      Busca rápida (paralelo)
+    </button>
+    <p class="muted">Só slots disponíveis; pula pivot/estilização.</p>
+  </div>
 </form>
+
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     const today = new Date().toISOString().split('T')[0];
