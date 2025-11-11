@@ -4,13 +4,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 import uuid, datetime as dt, sqlite3, traceback, os
+from types import SimpleNamespace  # <<< para envelopar dict em objeto
 
 from app.scraper import run_full_parallel, run_fast_parallel
 
 app = FastAPI()
 templates = Jinja2Templates(directory="app/templates")
 
-# (opcional) CORS, se for abrir o /api/job via outra origem
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,7 +18,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ----------------- Persistência simples de jobs (SQLite) -----------------
+# ----------------- Persistência (SQLite) -----------------
 DBPATH = os.getenv("JOBS_DB", "/tmp/jobs.db")
 
 def _db():
@@ -48,7 +48,7 @@ def jobs_get(job_id: str):
             return None
         return {"status": r[0], "html": r[1], "error": r[2]}
 
-# ----------------- Utilitário de datas -----------------
+# ----------------- Datas -----------------
 def _parse_dates(start_date: str | None, end_date: str | None):
     start = dt.datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else dt.date.today()
     end   = dt.datetime.strptime(end_date, "%Y-%m-%d").date()   if end_date   else dt.date.today() + dt.timedelta(days=14)
@@ -109,15 +109,16 @@ def run_fast(request: Request, background_tasks: BackgroundTasks,
 
 @app.get("/result/{job_id}", response_class=HTMLResponse)
 def result(request: Request, job_id: str):
-    # página com polling para /api/job/{id}
-    return templates.TemplateResponse("result.html", {"request": request, "job_id": job_id})
+    # Busca o job (ou cria um placeholder "pending") e entrega ao template como objeto
+    job_dict = jobs_get(job_id) or {"status": "pending", "html": None, "error": None}
+    job_obj = SimpleNamespace(**job_dict)  # permite usar job.status em Jinja
+    return templates.TemplateResponse("result.html", {"request": request, "job_id": job_id, "job": job_obj})
 
 @app.get("/api/job/{job_id}", response_class=HTMLResponse)
 def api_job(job_id: str):
     job = jobs_get(job_id)
     if not job:
-        # nunca 404 → mostra instrução clara
-        return HTMLResponse("<h3>Job não encontrado</h3><p>A instância pode ter reiniciado ou o ID é inválido. Refaça a busca.</p>")
+        return HTMLResponse("<h3>Job não encontrado</h3><p>A instância pode ter reiniciado. Refaça a busca.</p>")
     if job["status"] == "ok":
         return HTMLResponse(job["html"])
     if job["status"] == "error":
