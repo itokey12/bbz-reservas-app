@@ -3,60 +3,42 @@
 {% block content %}
 
 <h2>Buscar Reservas</h2>
-<p>Escolha o tipo de recurso, período e suas credenciais.</p>
 
-<form id="formBusca" method="post">
+{% if erro %}
+<div style="background:#ffdddd; padding:10px; border:1px solid #cc0000; margin-bottom:20px;">
+    <b>Erro:</b> {{ erro }}
+</div>
+{% endif %}
 
-    <!-- Tipo de busca -->
-    <label for="tipo">Tipo de Recurso:</label><br>
-    <select id="tipo" name="tipo" onchange="atualizarAction()">
-        <option value="tenis" selected>🎾 Tênis</option>
-        <option value="churras">🔥 Churrasqueira</option>
+<form method="post" action="/run">
+
+    <!-- Tipo de recurso -->
+    <label for="tipo_recurso">Tipo de Recurso:</label><br>
+    <select name="tipo_recurso" id="tipo_recurso">
+        <option value="tenis" {% if default_tipo == "tenis" %}selected{% endif %}>🎾 Tênis</option>
+        <option value="churras" {% if default_tipo == "churras" %}selected{% endif %}>🔥 Churrasqueira</option>
     </select>
     <br><br>
 
     <!-- Datas -->
-    <label>Data inicial:</label><br>
-    <input type="date" name="start_date" id="start_date">
+    <label for="start_date">Data inicial:</label><br>
+    <input type="date" name="start_date" id="start_date" value="{{ default_start }}">
     <br><br>
 
-    <label>Data final:</label><br>
-    <input type="date" name="end_date">
+    <label for="end_date">Data final:</label><br>
+    <input type="date" name="end_date" id="end_date" value="{{ default_end }}">
     <br><br>
 
     <!-- Credenciais -->
-    <label>Usuário BBZ:</label><br>
-    <input type="text" name="username" required><br><br>
+    <label for="username">Usuário BBZ:</label><br>
+    <input type="text" name="username" required>
+    <br><br>
 
-    <label>Senha BBZ:</label><br>
-    <input type="password" name="password" required><br><br>
+    <label for="password">Senha BBZ:</label><br>
+    <input type="password" name="password" required>
+    <br><br>
 
     <button class="btn" type="submit">Buscar</button>
 </form>
-
-
-<script>
-    // Ajusta a ação do formulário conforme o dropdown
-    function atualizarAction() {
-        const tipo = document.getElementById("tipo").value;
-        const form = document.getElementById("formBusca");
-
-        if (tipo === "tenis") {
-            form.action = "/run_tenis";
-        } else {
-            form.action = "/run_churras";
-        }
-    }
-
-    // Executa ao carregar (para selecionar o endpoint inicial)
-    atualizarAction();
-
-    // Preenche automaticamente a data inicial com HOJE
-    document.addEventListener('DOMContentLoaded', function() {
-        const hoje = new Date().toISOString().split('T')[0];
-        const campo = document.getElementById("start_date");
-        campo.value = hoje;
-    });
-</script>
 
 {% endblock %}
