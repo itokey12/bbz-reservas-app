@@ -24,17 +24,17 @@ RECURSOS = {
 # --------------------------
 def login(username: str, password: str) -> requests.Session:
     """
-    Faz login na área do cliente da BBZ e em seguida abre a tela
-    MinhasReservas, que cria a sessão no icondominio.webware.com.br.
-    Retorna um requests.Session autenticado.
+    1) Faz login no BBZ
+    2) Depois acessa a entrada do Webware (servc9)
+    3) Retorna sessão plenamente autenticada no Webware
     """
     s = requests.Session()
 
-    # 1) Abre a tela inicial da BBZ (carrega cookies iniciais)
+    # --- 1. Abre tela inicial do BBZ ---
     r = s.get("https://bbz.com.br/area-do-cliente/")
     r.raise_for_status()
 
-    # 2) Envia o form de login da BBZ
+    # --- 2. Faz login no BBZ ---
     payload = {
         "usuario": username,
         "senha": password,
@@ -43,8 +43,8 @@ def login(username: str, password: str) -> requests.Session:
     r = s.post("https://bbz.com.br/area-do-cliente/", data=payload)
     r.raise_for_status()
 
-    # 3) Abre Minhas Reservas para criar sessão no CondoPro
-    r = s.get(f"{BASE}/Reservas/MinhasReservas")
+    # --- 3. Acessa a porta de entrada do Webware = cria sessão ASP.NET ---
+    r = s.get("https://servc9.webware.com.br/bin/skin/aInicioSkin.asp")
     r.raise_for_status()
 
     return s
