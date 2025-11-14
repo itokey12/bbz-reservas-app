@@ -1,25 +1,67 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>BBZ Reservas · MVP</title>
+<head>
+    <meta charset="UTF-8">
+    <title>BBZ Reservas</title>
+
     <style>
-      body{font-family: Inter,Segoe UI,Roboto,Arial,sans-serif; margin: 24px; color:#222;}
-      .card{max-width: 880px; margin: 0 auto; padding: 20px; border:1px solid #eee; border-radius:16px; box-shadow:0 8px 20px rgba(0,0,0,.05)}
-      .btn{display:inline-block; padding:10px 14px; border-radius:10px; border:1px solid #222; background:#111; color:#fff; text-decoration:none; cursor:pointer}
-      label{display:block; margin:10px 0 4px; font-weight:600}
-      input{width:100%; padding:10px 12px; border-radius:8px; border:1px solid #ddd}
-      .muted{color:#666; font-size:13px}
-      .center{ text-align:center }
-      .spinner{ width:20px; height:20px; border:3px solid #ddd; border-top-color:#111; border-radius:50%; animation:spin 1s linear infinite; display:inline-block; vertical-align:middle}
-      @keyframes spin{ to{ transform:rotate(360deg)} }
-      .mt{ margin-top: 14px }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f4f4f4;
+        }
+
+        header {
+            background: #2a6ad4;
+            padding: 15px;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 30px auto;
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 0 12px rgba(0,0,0,0.1);
+        }
+
+        button, select, input {
+            padding: 10px;
+            font-size: 15px;
+            margin-top: 5px;
+        }
+
+        .btn {
+            background: #2a6ad4;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .btn:hover {
+            background: #1d4ea3;
+        }
+
+        .loading {
+            font-size: 18px;
+            color: #555;
+            text-align: center;
+        }
     </style>
-  </head>
-  <body>
-    <div class="card">
-      {% block content %}{% endblock %}
-    </div>
-  </body>
+</head>
+
+<body>
+<header>BBZ — Reservas</header>
+
+<div class="container">
+    {% block content %}{% endblock %}
+</div>
+
+</body>
 </html>
+
