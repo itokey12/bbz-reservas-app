@@ -1,33 +1,62 @@
 {% extends "base.html" %}
+
 {% block content %}
-<h1>BBZ Reservas · Coletar disponibilidade</h1>
-<p class="muted">
-  Entre com seu login/senha da área do cliente e, opcionalmente, escolha um período.
-  <br><strong>Dica:</strong> quanto maior o período, mais tempo levará para extrair os dados.
-</p>
 
-<form method="post" action="/run">
-  <label for="username">Login (BBZ)</label>
-  <input id="username" name="username" type="text" required>
+<h2>Buscar Reservas</h2>
+<p>Escolha o tipo de recurso, período e suas credenciais.</p>
 
-  <label for="password">Senha (BBZ)</label>
-  <input id="password" name="password" type="password" required>
+<form id="formBusca" method="post">
 
-  <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top:14px">
-    <div>
-      <label for="start_date">Data inicial (opcional)</label>
-      <input id="start_date" name="start_date" type="date">
-    </div>
-    <div>
-      <label for="end_date">Data final (opcional)</label>
-      <input id="end_date" name="end_date" type="date">
-    </div>
-  </div>
+    <!-- Tipo de busca -->
+    <label for="tipo">Tipo de Recurso:</label><br>
+    <select id="tipo" name="tipo" onchange="atualizarAction()">
+        <option value="tenis" selected>🎾 Tênis</option>
+        <option value="churras">🔥 Churrasqueira</option>
+    </select>
+    <br><br>
 
-  <p class="muted" style="margin-top:8px">
-    Se você deixar em branco, buscaremos os próximos <strong>15 dias</strong>.
-  </p>
+    <!-- Datas -->
+    <label>Data inicial:</label><br>
+    <input type="date" name="start_date" id="start_date">
+    <br><br>
 
-  <div class="mt"><button class="btn" type="submit">Gerar disponibilidade</button></div>
+    <label>Data final:</label><br>
+    <input type="date" name="end_date">
+    <br><br>
+
+    <!-- Credenciais -->
+    <label>Usuário BBZ:</label><br>
+    <input type="text" name="username" required><br><br>
+
+    <label>Senha BBZ:</label><br>
+    <input type="password" name="password" required><br><br>
+
+    <button class="btn" type="submit">Buscar</button>
 </form>
+
+
+<script>
+    // Ajusta a ação do formulário conforme o dropdown
+    function atualizarAction() {
+        const tipo = document.getElementById("tipo").value;
+        const form = document.getElementById("formBusca");
+
+        if (tipo === "tenis") {
+            form.action = "/run_tenis";
+        } else {
+            form.action = "/run_churras";
+        }
+    }
+
+    // Executa ao carregar (para selecionar o endpoint inicial)
+    atualizarAction();
+
+    // Preenche automaticamente a data inicial com HOJE
+    document.addEventListener('DOMContentLoaded', function() {
+        const hoje = new Date().toISOString().split('T')[0];
+        const campo = document.getElementById("start_date");
+        campo.value = hoje;
+    });
+</script>
+
 {% endblock %}
