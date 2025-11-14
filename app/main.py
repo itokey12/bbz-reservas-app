@@ -1,78 +1,169 @@
 from fastapi import FastAPI, Request, Form, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
-import uuid
-from app.scraper import run_scraping
+import uuid, datetime as dt, sqlite3, traceback, os
+
+# Importa duas funções distintas do scraper
+from app.scraper import run_tenis, run_churras
 
 app = FastAPI()
 templates = Jinja2Templates(directory="app/templates")
 
-JOBS = {}
+# -------------------------------------------------------------------
+#  Persistência simples de jobs
+# -------------------------------------------------------------------
+
+DBPATH = os.getenv("JOBS_DB", "/tmp/jobs.db")
+
+def _db():
+    conn = sqlite3.connect(DBPATH, check_same_thread=False)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS jobs(
+            id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            html TEXT,
+            error TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+    return conn
+
+def jobs_put(job_id: str, status: str, html=None, error=None):
+    with _db() as c:
+        c.execute(
+            "REPLACE INTO jobs(id,status,html,error,created_at) VALUES(?,?,?,?,?)",
+            (job_id, status, html, error, dt.datetime.utcnow().isoformat())
+        )
+
+def jobs_get(job_id: str):
+    with _db() as c:
+        row = c.execute("SELECT status, html, error FROM jobs WHERE id=?",
+                        (job_id,)).fetchone()
+        if not row:
+            return None
+        return {"status": row[0], "html": row[1], "error": row[2]}
+
+# -------------------------------------------------------------------
+# Utilitário de datas
+# -------------------------------------------------------------------
+
+def _parse_dates(start_date: str | None, end_date: str | None):
+    start = dt.datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else dt.date.today()
+    end   = dt.datetime.strptime(end_date, "%Y-%m-%d").date()   if end_date   else dt.date.today() + dt.timedelta(days=14)
+
+    if end < start:
+        raise ValueError("Data final anterior à inicial.")
+    if (end - start).days > 45:
+        raise ValueError("Período muito longo (máximo 45 dias).")
+
+    return start, end
+
+# -------------------------------------------------------------------
+#  Página inicial
+# -------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-def _do_job(job_id: str, username: str, password: str):
-    try:
-        html = run_scraping(username, password)
-        JOBS[job_id] = {"status": "ok", "html": html, "error": None}
-    except Exception as e:
-        JOBS[job_id] = {"status": "error", "html": None, "error": str(e)}
+# -------------------------------------------------------------------
+#  POST Tênis
+# -------------------------------------------------------------------
 
-@app.post("/run", response_class=HTMLResponse)
-def run(request: Request, background_tasks: BackgroundTasks,
-        username: str = Form(...), password: str = Form(...),
-        start_date: str = Form(None), end_date: str = Form(None)):
-    import datetime as dt
+@app.post("/run_tenis", response_class=HTMLResponse)
+def run_tenis_route(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    username: str = Form(...),
+    password: str = Form(...),
+    start_date: str = Form(None),
+    end_date: str = Form(None),
+):
     job_id = uuid.uuid4().hex
-    JOBS[job_id] = {"status": "pending", "html": None, "error": None}
+    jobs_put(job_id, "pending")
 
-    # Parse e validação leve
-    start, end = None, None
     try:
-        if start_date:
-            start = dt.datetime.strptime(start_date, "%Y-%m-%d").date()
-        if end_date:
-            end = dt.datetime.strptime(end_date, "%Y-%m-%d").date()
-        if start and end and end < start:
-            raise ValueError("Data final anterior à inicial.")
-        # limites razoáveis de janela (para não travar headless)
-        ref_start = start or dt.date.today()
-        ref_end = end or (dt.date.today() + dt.timedelta(days=14))
-        max_span = 45  # dias
-        if (ref_end - ref_start).days > max_span:
-            raise ValueError(f"Período muito longo. Máximo permitido: {max_span} dias.")
+        start, end = _parse_dates(start_date, end_date)
     except Exception as e:
-        JOBS[job_id] = {"status": "error", "html": None, "error": f"Datas inválidas: {e}"}
+        jobs_put(job_id, "error", error=str(e))
         return RedirectResponse(url=f"/result/{job_id}", status_code=303)
 
-    def _do_job(job_id: str, username: str, password: str, start, end):
-        from app.scraper import run_scraping
+    def _job():
         try:
-            html = run_scraping(username, password, start_date=start, end_date=end)
-            JOBS[job_id] = {"status": "ok", "html": html, "error": None}
-        except Exception as e:
-            JOBS[job_id] = {"status": "error", "html": None, "error": str(e)}
+            html = run_tenis(username, password, start, end)
+            jobs_put(job_id, "ok", html=html)
+        except Exception:
+            jobs_put(job_id, "error", error=traceback.format_exc())
 
-    background_tasks.add_task(_do_job, job_id, username, password, start, end)
+    background_tasks.add_task(_job)
     return RedirectResponse(url=f"/result/{job_id}", status_code=303)
 
+# -------------------------------------------------------------------
+#  POST Churrasqueira
+# -------------------------------------------------------------------
+
+@app.post("/run_churras", response_class=HTMLResponse)
+def run_churras_route(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    username: str = Form(...),
+    password: str = Form(...),
+    start_date: str = Form(None),
+    end_date: str = Form(None),
+):
+    job_id = uuid.uuid4().hex
+    jobs_put(job_id, "pending")
+
+    try:
+        start, end = _parse_dates(start_date, end_date)
+    except Exception as e:
+        jobs_put(job_id, "error", error=str(e))
+        return RedirectResponse(url=f"/result/{job_id}", status_code=303)
+
+    def _job():
+        try:
+            html = run_churras(username, password, start, end)
+            jobs_put(job_id, "ok", html=html)
+        except Exception:
+            jobs_put(job_id, "error", error=traceback.format_exc())
+
+    background_tasks.add_task(_job)
+    return RedirectResponse(url=f"/result/{job_id}", status_code=303)
+
+# -------------------------------------------------------------------
+#  Página de polling
+# -------------------------------------------------------------------
+
 @app.get("/result/{job_id}", response_class=HTMLResponse)
-def result(request: Request, job_id: str):
-    job = JOBS.get(job_id)
-    if not job:
-        return PlainTextResponse("Job não encontrado.", status_code=404)
-    return templates.TemplateResponse("result.html", {"request": request, "job_id": job_id, "job": job})
+def result_page(request: Request, job_id: str):
+    job = jobs_get(job_id)
+    return templates.TemplateResponse(
+        "result.html",
+        {"request": request, "job_id": job_id, "job": job},
+    )
+
+# -------------------------------------------------------------------
+#  API — consulta job
+# -------------------------------------------------------------------
 
 @app.get("/api/job/{job_id}", response_class=HTMLResponse)
 def api_job(job_id: str):
-    job = JOBS.get(job_id)
+    job = jobs_get(job_id)
     if not job:
-        return PlainTextResponse("Job não encontrado.", status_code=404)
+        return HTMLResponse("<h3>Job não encontrado</h3>")
+
     if job["status"] == "ok":
         return HTMLResponse(job["html"])
-    elif job["status"] == "error":
-        return HTMLResponse(f"<h3>Erro:</h3><pre>{job['error']}</pre>", status_code=500)
-    else:
-        return HTMLResponse("<em>Processando…</em>")
+
+    if job["status"] == "error":
+        return HTMLResponse(f"<h3>Erro</h3><pre>{job['error']}</pre>")
+
+    return HTMLResponse("Processando…")
+
+# -------------------------------------------------------------------
+#  HEAD para health check
+# -------------------------------------------------------------------
+
+@app.head("/")
+def head_root():
+    return PlainTextResponse("ok")
