@@ -1,169 +1,121 @@
-from fastapi import FastAPI, Request, Form, BackgroundTasks
-from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
-from fastapi.templating import Jinja2Templates
-import uuid, datetime as dt, sqlite3, traceback, os
+from datetime import date, timedelta, datetime
 
-# Importa duas funções distintas do scraper
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.templating import Jinja2Templates
+
 from app.scraper import run_tenis, run_churras
 
 app = FastAPI()
 templates = Jinja2Templates(directory="app/templates")
 
-# -------------------------------------------------------------------
-#  Persistência simples de jobs
-# -------------------------------------------------------------------
 
-DBPATH = os.getenv("JOBS_DB", "/tmp/jobs.db")
+# ----------------- Utilitário de datas -----------------
 
-def _db():
-    conn = sqlite3.connect(DBPATH, check_same_thread=False)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS jobs(
-            id TEXT PRIMARY KEY,
-            status TEXT NOT NULL,
-            html TEXT,
-            error TEXT,
-            created_at TEXT NOT NULL
-        )
-    """)
-    return conn
 
-def jobs_put(job_id: str, status: str, html=None, error=None):
-    with _db() as c:
-        c.execute(
-            "REPLACE INTO jobs(id,status,html,error,created_at) VALUES(?,?,?,?,?)",
-            (job_id, status, html, error, dt.datetime.utcnow().isoformat())
-        )
+def _parse_period(start_str: str | None, end_str: str | None):
+    """
+    Converte strings YYYY-MM-DD em datas.
+    Se vierem em branco, usa hoje e hoje+14.
+    Faz validações básicas (end >= start, max 45 dias).
+    Devolve (start_iso, end_iso, msg_erro).
+    """
+    today = date.today()
 
-def jobs_get(job_id: str):
-    with _db() as c:
-        row = c.execute("SELECT status, html, error FROM jobs WHERE id=?",
-                        (job_id,)).fetchone()
-        if not row:
-            return None
-        return {"status": row[0], "html": row[1], "error": row[2]}
+    if start_str:
+        start = datetime.strptime(start_str, "%Y-%m-%d").date()
+    else:
+        start = today
 
-# -------------------------------------------------------------------
-# Utilitário de datas
-# -------------------------------------------------------------------
-
-def _parse_dates(start_date: str | None, end_date: str | None):
-    start = dt.datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else dt.date.today()
-    end   = dt.datetime.strptime(end_date, "%Y-%m-%d").date()   if end_date   else dt.date.today() + dt.timedelta(days=14)
+    if end_str:
+        end = datetime.strptime(end_str, "%Y-%m-%d").date()
+    else:
+        end = today + timedelta(days=14)
 
     if end < start:
-        raise ValueError("Data final anterior à inicial.")
+        return None, None, "Data final não pode ser anterior à inicial."
+
     if (end - start).days > 45:
-        raise ValueError("Período muito longo (máximo 45 dias).")
+        return None, None, "Período muito longo. Máximo permitido: 45 dias."
 
-    return start, end
+    # devolve novamente como string YYYY-MM-DD para passar pro scraper
+    return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"), None
 
-# -------------------------------------------------------------------
-#  Página inicial
-# -------------------------------------------------------------------
+
+# ----------------- Rotas -----------------
+
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
-
-# -------------------------------------------------------------------
-#  POST Tênis
-# -------------------------------------------------------------------
-
-@app.post("/run_tenis", response_class=HTMLResponse)
-def run_tenis_route(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    username: str = Form(...),
-    password: str = Form(...),
-    start_date: str = Form(None),
-    end_date: str = Form(None),
-):
-    job_id = uuid.uuid4().hex
-    jobs_put(job_id, "pending")
-
-    try:
-        start, end = _parse_dates(start_date, end_date)
-    except Exception as e:
-        jobs_put(job_id, "error", error=str(e))
-        return RedirectResponse(url=f"/result/{job_id}", status_code=303)
-
-    def _job():
-        try:
-            html = run_tenis(username, password, start, end)
-            jobs_put(job_id, "ok", html=html)
-        except Exception:
-            jobs_put(job_id, "error", error=traceback.format_exc())
-
-    background_tasks.add_task(_job)
-    return RedirectResponse(url=f"/result/{job_id}", status_code=303)
-
-# -------------------------------------------------------------------
-#  POST Churrasqueira
-# -------------------------------------------------------------------
-
-@app.post("/run_churras", response_class=HTMLResponse)
-def run_churras_route(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    username: str = Form(...),
-    password: str = Form(...),
-    start_date: str = Form(None),
-    end_date: str = Form(None),
-):
-    job_id = uuid.uuid4().hex
-    jobs_put(job_id, "pending")
-
-    try:
-        start, end = _parse_dates(start_date, end_date)
-    except Exception as e:
-        jobs_put(job_id, "error", error=str(e))
-        return RedirectResponse(url=f"/result/{job_id}", status_code=303)
-
-    def _job():
-        try:
-            html = run_churras(username, password, start, end)
-            jobs_put(job_id, "ok", html=html)
-        except Exception:
-            jobs_put(job_id, "error", error=traceback.format_exc())
-
-    background_tasks.add_task(_job)
-    return RedirectResponse(url=f"/result/{job_id}", status_code=303)
-
-# -------------------------------------------------------------------
-#  Página de polling
-# -------------------------------------------------------------------
-
-@app.get("/result/{job_id}", response_class=HTMLResponse)
-def result_page(request: Request, job_id: str):
-    job = jobs_get(job_id)
+async def index(request: Request):
+    """
+    Tela inicial: formulário com usuário, senha, datas e tipo de recurso.
+    """
     return templates.TemplateResponse(
-        "result.html",
-        {"request": request, "job_id": job_id, "job": job},
+        "index.html",
+        {
+            "request": request,
+            # valores default do formulário
+            "default_start": date.today().strftime("%Y-%m-%d"),
+            "default_end": (date.today() + timedelta(days=14)).strftime("%Y-%m-%d"),
+            "default_tipo": "tenis",
+            "erro": None,
+        },
     )
 
-# -------------------------------------------------------------------
-#  API — consulta job
-# -------------------------------------------------------------------
 
-@app.get("/api/job/{job_id}", response_class=HTMLResponse)
-def api_job(job_id: str):
-    job = jobs_get(job_id)
-    if not job:
-        return HTMLResponse("<h3>Job não encontrado</h3>")
+@app.post("/run", response_class=HTMLResponse)
+async def run_busca(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    tipo_recurso: str = Form("tenis"),  # "tenis" ou "churras"
+    start_date: str | None = Form(None),
+    end_date: str | None = Form(None),
+):
+    """
+    Recebe o formulário, valida datas, chama o scraper HTTP
+    e devolve o result.html já com os dados.
+    """
+    start_iso, end_iso, err = _parse_period(start_date, end_date)
 
-    if job["status"] == "ok":
-        return HTMLResponse(job["html"])
+    if err:
+        # Volta para a tela inicial mostrando o erro
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "default_start": start_date or date.today().strftime("%Y-%m-%d"),
+                "default_end": end_date
+                or (date.today() + timedelta(days=14)).strftime("%Y-%m-%d"),
+                "default_tipo": tipo_recurso,
+                "erro": err,
+            },
+        )
 
-    if job["status"] == "error":
-        return HTMLResponse(f"<h3>Erro</h3><pre>{job['error']}</pre>")
+    # Chama o scraper correto
+    if tipo_recurso == "churras":
+        contexto = run_churras(start_iso, end_iso, username, password)
+    else:
+        # default: tênis
+        contexto = run_tenis(start_iso, end_iso, username, password)
 
-    return HTMLResponse("Processando…")
+    # Inclui metadados para o template
+    contexto |= {
+        "tipo_recurso": tipo_recurso,
+        "start_iso": start_iso,
+        "end_iso": end_iso,
+    }
 
-# -------------------------------------------------------------------
-#  HEAD para health check
-# -------------------------------------------------------------------
+    return templates.TemplateResponse(
+        "result.html",
+        {
+            "request": request,
+            "context": contexto,
+        },
+    )
 
+
+# opcional: para o healthcheck do Render não dar 405 em HEAD /
 @app.head("/")
-def head_root():
+async def head_root():
     return PlainTextResponse("ok")
