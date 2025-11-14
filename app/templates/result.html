@@ -1,30 +1,30 @@
 {% extends "base.html" %}
-{% block content %}
-<h1>Resultado</h1>
 
-{% if job.status == "pending" %}
-  <p class="muted"><span class="spinner"></span> Processando… esta página atualiza sozinha.</p>
-  <script>
+{% block content %}
+
+<h2>Processando…</h2>
+<div id="status" class="loading">Aguarde...</div>
+
+<div id="resultado"></div>
+
+<script>
     const jobId = "{{ job_id }}";
-    async function poll() {
-      try {
-        const res = await fetch(`/api/job/${jobId}`, { cache: "no-store" });
-        const html = await res.text();
-        if (res.status === 200 && !html.includes("Processando…")) {
-          document.open(); document.write(html); document.close();
-        } else {
-          setTimeout(poll, 1200);
-        }
-      } catch(e) {
-        setTimeout(poll, 1500);
-      }
+
+    function verificar() {
+        fetch(`/api/job/${jobId}`)
+            .then(r => r.text())
+            .then(html => {
+                if (html.includes("Processando…")) {
+                    // ainda pendente
+                    return;
+                }
+                document.getElementById("resultado").innerHTML = html;
+                document.getElementById("status").style.display = "none";
+            });
     }
-    setTimeout(poll, 900);
-  </script>
-{% elif job.status == "error" %}
-  <h3>Erro ao coletar</h3>
-  <pre>{{ job.error }}</pre>
-{% else %}
-  {{ job.html | safe }}
-{% endif %}
+
+    // poll a cada 1 segundo
+    setInterval(verificar, 1000);
+</script>
+
 {% endblock %}
