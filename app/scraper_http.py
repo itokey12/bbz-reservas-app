@@ -67,6 +67,9 @@ def buscar_tenis_dia(session: requests.Session, recurso: str, dia: date):
 
     r = session.get(f"{BASE}/Reservas/DataDisponiveis", params=params)
     r.raise_for_status()
+    print("URL:", r.url)
+    print("STATUS:", r.status_code)
+    print(r.text[:2000])  # <-- quero ver isso
 
     soup = BeautifulSoup(r.text, "html.parser")
     linhas = []
