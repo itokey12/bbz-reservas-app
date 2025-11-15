@@ -1,44 +1,40 @@
 {% extends "base.html" %}
-
 {% block content %}
 
-<h2>Buscar Reservas</h2>
+<h2>Consultar Reservas</h2>
 
-{% if erro %}
-<div style="background:#ffdddd; padding:10px; border:1px solid #cc0000; margin-bottom:20px;">
-    <b>Erro:</b> {{ erro }}
-</div>
-{% endif %}
+<form method="POST" action="/run">
 
-<form method="post" action="/run">
-
-    <!-- Tipo de recurso -->
-    <label for="tipo_recurso">Tipo de Recurso:</label><br>
-    <select name="tipo_recurso" id="tipo_recurso">
-        <option value="tenis" {% if default_tipo == "tenis" %}selected{% endif %}>🎾 Tênis</option>
-        <option value="churras" {% if default_tipo == "churras" %}selected{% endif %}>🔥 Churrasqueira</option>
-    </select>
-    <br><br>
-
-    <!-- Datas -->
-    <label for="start_date">Data inicial:</label><br>
-    <input type="date" name="start_date" id="start_date" value="{{ default_start }}">
-    <br><br>
-
-    <label for="end_date">Data final:</label><br>
-    <input type="date" name="end_date" id="end_date" value="{{ default_end }}">
-    <br><br>
-
-    <!-- Credenciais -->
-    <label for="username">Usuário BBZ:</label><br>
+    <label>Usuário (BBZ):</label>
     <input type="text" name="username" required>
-    <br><br>
 
-    <label for="password">Senha BBZ:</label><br>
+    <label>Senha:</label>
     <input type="password" name="password" required>
-    <br><br>
 
-    <button class="btn" type="submit">Buscar</button>
+    <label>Tipo:</label>
+    <select name="tipo" required>
+        <option value="tenis" selected>Quadras de Tênis</option>
+        <option value="churras">Churrasqueiras</option>
+    </select>
+
+    <label>Recurso:</label>
+    <select name="recurso" required>
+        <option value="tenis_1">TÊNIS 1</option>
+        <option value="tenis_2">TÊNIS 2</option>
+        <option value="tenis_3">TÊNIS 3</option>
+        <option value="ch_1">Churrasqueira 1</option>
+        <option value="ch_2">Churrasqueira 2</option>
+        <option value="ch_3">Churrasqueira 3</option>
+    </select>
+
+    <label>Data inicial:</label>
+    <input type="date" name="start_date" required>
+
+    <label>Data final:</label>
+    <input type="date" name="end_date" required>
+
+    <button type="submit">Pesquisar</button>
+
 </form>
 
 {% endblock %}
