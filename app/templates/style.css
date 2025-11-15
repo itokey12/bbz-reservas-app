@@ -1,0 +1,38 @@
+body {
+    font-family: Arial;
+    margin: 30px;
+}
+
+header {
+    background: #0d47a1;
+    color: white;
+    padding: 15px;
+    font-size: 22px;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    width: 300px;
+}
+
+label { margin-top: 10px; }
+
+button {
+    margin-top: 20px;
+    background: #0d47a1;
+    color: white;
+    padding: 8px;
+    border: none;
+    cursor: pointer;
+}
+
+table {
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+td, th {
+    border: 1px solid #555;
+    padding: 6px;
+}
