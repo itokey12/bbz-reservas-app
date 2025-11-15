@@ -1,95 +1,27 @@
 {% extends "base.html" %}
-
 {% block content %}
 
-<h2>Resultados de {{ "Tênis" if context.tipo == "tenis" else "Churrasqueira" }}</h2>
+<h2>Resultados — {{ tipo|capitalize }}</h2>
+<p>Período: {{ start }} até {{ end }}</p>
 
-<p>
-    Período: <b>{{ context.start_iso }}</b> até <b>{{ context.end_iso }}</b>
-</p>
+{% for dia in resultado %}
+    <h3>{{ dia.data.strftime("%d/%m/%Y") }}</h3>
 
-<hr><br>
+    {% if tipo == "tenis" %}
+        <table>
+            <tr><th>Hora</th><th>Status</th></tr>
 
-{% if context.tipo == "tenis" %}
-
-    {# ====================================== #}
-    {#          TABELA DE TÊNIS               #}
-    {# ====================================== #}
-
-    {% for dia in context.resultados %}
-        <h3>{{ dia.data }}</h3>
-
-        {% for quadra, horarios in dia.quadras.items() %}
-            <h4>Quadra {{ quadra }}</h4>
-
-            <table border="1" cellpadding="6">
+            {% for linha in dia.dados %}
                 <tr>
-                    <th>Hora</th>
-                    <th>Status</th>
-                </tr>
-
-                {% if horarios|length == 0 %}
-                    <tr>
-                        <td colspan="2">Nenhum horário retornado.</td>
-                    </tr>
-                {% else %}
-                    {% for h in horarios %}
-                        <tr>
-                            <td>{{ h.hora }}</td>
-                            <td>
-                                {% if h.reserva_url %}
-                                    <a href="{{ h.reserva_url }}" target="_blank">Disponível</a>
-                                {% else %}
-                                    {{ h.status }}
-                                {% endif %}
-                            </td>
-                        </tr>
-                    {% endfor %}
-                {% endif %}
-            </table>
-
-            <br>
-        {% endfor %}
-
-        <hr>
-    {% endfor %}
-
-{% else %}
-
-    {# ====================================== #}
-    {#          TABELA DE CHURRASQUEIRA       #}
-    {# ====================================== #}
-
-    {% for dia in context.resultados %}
-        <h3>{{ dia.data }}</h3>
-
-        <table border="1" cellpadding="6">
-            <tr>
-                <th>Churrasqueira</th>
-                <th>Status</th>
-            </tr>
-
-            {% for num, info in dia.churrasqueiras.items() %}
-                <tr>
-                    <td>{{ num }}</td>
-                    <td>
-                        {% if info == None %}
-                            Sem dados
-                        {% else %}
-                            {% if info.reserva_url %}
-                                <a href="{{ info.reserva_url }}" target="_blank">{{ info.status }} — Reservar</a>
-                            {% else %}
-                                {{ info.status }}
-                            {% endif %}
-                        {% endif %}
-                    </td>
+                    <td>{{ linha.hora }}</td>
+                    <td>{{ linha.status }}</td>
                 </tr>
             {% endfor %}
         </table>
 
-        <br><hr>
-    {% endfor %}
-
-{% endif %}
+    {% else %}
+        <p>Status: {{ dia.dados.status }}</p>
+    {% endif %}
+{% endfor %}
 
 {% endblock %}
