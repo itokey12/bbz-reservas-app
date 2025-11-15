@@ -1,67 +1,17 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>BBZ Reservas</title>
-
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background: #f4f4f4;
-        }
-
-        header {
-            background: #2a6ad4;
-            padding: 15px;
-            color: white;
-            font-size: 20px;
-            font-weight: bold;
-        }
-
-        .container {
-            max-width: 900px;
-            margin: 30px auto;
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 0 12px rgba(0,0,0,0.1);
-        }
-
-        button, select, input {
-            padding: 10px;
-            font-size: 15px;
-            margin-top: 5px;
-        }
-
-        .btn {
-            background: #2a6ad4;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-
-        .btn:hover {
-            background: #1d4ea3;
-        }
-
-        .loading {
-            font-size: 18px;
-            color: #555;
-            text-align: center;
-        }
-    </style>
+    <title>BBZ — Reservas</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
-
 <body>
-<header>BBZ — Reservas</header>
+    <header>
+        <h1>BBZ — Reservas</h1>
+    </header>
 
-<div class="container">
-    {% block content %}{% endblock %}
-</div>
-
+    <main>
+        {% block content %}{% endblock %}
+    </main>
 </body>
 </html>
-
