@@ -3,3 +3,4 @@ uvicorn
 jinja2
 requests
 beautifulsoup4
+python-multipart
