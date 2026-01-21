@@ -1,40 +1,33 @@
 {% extends "base.html" %}
 {% block content %}
+<h1>BBZ Reservas · Coletar disponibilidade</h1>
+<p class="muted">
+  Entre com seu login/senha da área do cliente e, opcionalmente, escolha um período.
+  <br><strong>Dica:</strong> quanto maior o período, mais tempo levará para extrair os dados.
+</p>
 
-<h2>Consultar Reservas</h2>
+<form method="post" action="/run">
+  <label for="username">Login (BBZ)</label>
+  <input id="username" name="username" type="text" required>
 
-<form method="POST" action="/run">
+  <label for="password">Senha (BBZ)</label>
+  <input id="password" name="password" type="password" required>
 
-    <label>Usuário (BBZ):</label>
-    <input type="text" name="username" required>
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top:14px">
+    <div>
+      <label for="start_date">Data inicial (opcional)</label>
+      <input id="start_date" name="start_date" type="date">
+    </div>
+    <div>
+      <label for="end_date">Data final (opcional)</label>
+      <input id="end_date" name="end_date" type="date">
+    </div>
+  </div>
 
-    <label>Senha:</label>
-    <input type="password" name="password" required>
+  <p class="muted" style="margin-top:8px">
+    Se você deixar em branco, buscaremos os próximos <strong>15 dias</strong>.
+  </p>
 
-    <label>Tipo:</label>
-    <select name="tipo" required>
-        <option value="tenis" selected>Quadras de Tênis</option>
-        <option value="churras">Churrasqueiras</option>
-    </select>
-
-    <label>Recurso:</label>
-    <select name="recurso" required>
-        <option value="tenis_1">TÊNIS 1</option>
-        <option value="tenis_2">TÊNIS 2</option>
-        <option value="tenis_3">TÊNIS 3</option>
-        <option value="ch_1">Churrasqueira 1</option>
-        <option value="ch_2">Churrasqueira 2</option>
-        <option value="ch_3">Churrasqueira 3</option>
-    </select>
-
-    <label>Data inicial:</label>
-    <input type="date" name="start_date" required>
-
-    <label>Data final:</label>
-    <input type="date" name="end_date" required>
-
-    <button type="submit">Pesquisar</button>
-
+  <div class="mt"><button class="btn" type="submit">Gerar disponibilidade</button></div>
 </form>
-
 {% endblock %}

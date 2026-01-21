@@ -1,27 +1,30 @@
 {% extends "base.html" %}
 {% block content %}
+<h1>Resultado</h1>
 
-<h2>Resultados — {{ tipo|capitalize }}</h2>
-<p>Período: {{ start }} até {{ end }}</p>
-
-{% for dia in resultado %}
-    <h3>{{ dia.data.strftime("%d/%m/%Y") }}</h3>
-
-    {% if tipo == "tenis" %}
-        <table>
-            <tr><th>Hora</th><th>Status</th></tr>
-
-            {% for linha in dia.dados %}
-                <tr>
-                    <td>{{ linha.hora }}</td>
-                    <td>{{ linha.status }}</td>
-                </tr>
-            {% endfor %}
-        </table>
-
-    {% else %}
-        <p>Status: {{ dia.dados.status }}</p>
-    {% endif %}
-{% endfor %}
-
+{% if job.status == "pending" %}
+  <p class="muted"><span class="spinner"></span> Processando… esta página atualiza sozinha.</p>
+  <script>
+    const jobId = "{{ job_id }}";
+    async function poll() {
+      try {
+        const res = await fetch(`/api/job/${jobId}`, { cache: "no-store" });
+        const html = await res.text();
+        if (res.status === 200 && !html.includes("Processando…")) {
+          document.open(); document.write(html); document.close();
+        } else {
+          setTimeout(poll, 1200);
+        }
+      } catch(e) {
+        setTimeout(poll, 1500);
+      }
+    }
+    setTimeout(poll, 900);
+  </script>
+{% elif job.status == "error" %}
+  <h3>Erro ao coletar</h3>
+  <pre>{{ job.error }}</pre>
+{% else %}
+  {{ job.html | safe }}
+{% endif %}
 {% endblock %}
